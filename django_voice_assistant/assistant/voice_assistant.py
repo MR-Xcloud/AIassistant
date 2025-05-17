@@ -51,6 +51,15 @@ def get_assistant_response(query):
     if "bed prakash" in query_lower or "general manager" in query_lower:
         return "Bed Prakash is the General Manager - Admin & Accounts at WebMobril."
     
+    if "Anurag sharma" in query_lower or "Senior Software Developer" in query_lower:
+        return "Anurag Sharma is the Senior Software Developer at WebMobril Technologies"
+    
+    if "Kartikey Yadav" in query_lower or "AI/ML Developer" in query_lower:
+        return "Kartikey Yadav is the AI/ML Developer at WebMobril Technologies"
+    
+    if "Pooja Puri" in query_lower or "Python Team Lead" in query_lower:
+        return "Pooja Puri is the Python Team Lead at WebMobril Technologies"
+    
     # Check if the query is a conversational input
     if is_greeting(query) or is_how_are_you(query) or is_thank_you(query) or is_goodbye(query) or is_casual_question(query):
         response = get_conversation_response(query)
