@@ -157,7 +157,7 @@
       if (src==='webmobril') {
         // Django API
         try {
-          const r = await fetch('http://18.188.184.213:8025/api/query/', {
+          const r = await fetch('https://staging.webmobrildemo.com/api/query/', {
             method:'POST',
             headers:{'Content-Type':'application/json'},
             body:JSON.stringify({query:q})
