@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChatGPT-style Chatbot UI</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body { background-color: #0b0f19; }
+    .center-symbol {
+      position: absolute;
+      top: 35%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 4rem;
+      z-index: 10;
+    }
+    .chat-card { background-color: #1f2937; border: 1px solid #374151; }
+    .input-box input::placeholder { color: #9ca3af; }
+    .icon-btn:hover { color: #ffffff; }
+    select {
+      background-color: #1f2937;
+      color: #9ca3af;
+      border: none;
+      outline: none;
+      font-size: 0.875rem;
+      padding: 0.25rem 0.5rem;
+    }
+    select:focus {
+      outline: none;
+      border: 1px solid #00ffe0;
+    }
+    code {
+      background: #1e1e1e;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    pre code {
+      display: block;
+      background: #1e1e1e;
+      padding: 1em;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body class="text-white font-sans">
+  <canvas id="bg-canvas"
+          style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0;
+                 pointer-events:none; filter: blur(4px) brightness(0.7); opacity: 0.5;">
+  </canvas>
+
+  <h1 class="text-3xl font-bold text-center mt-24 mb-8 tracking-tight text-cyan-400 drop-shadow-lg">
+    WM Assistant
+  </h1>
+
+  <!-- Chat Area -->
+  <div class="absolute top-64 bottom-32 left-0 right-0 flex flex-col items-center z-10">
+    <div id="chatArea" class="w-full max-w-2xl px-4 overflow-y-auto" style="height:100%;"></div>
+  </div>
+
+  <!-- Input Area -->
+  <div class="fixed bottom-8 left-1/2 transform -translate-x-1/2 w-full max-w-2xl px-4 z-20">
+    <div class="chat-card shadow-md rounded-lg">
+      <div class="p-4 flex items-center gap-4 input-box">
+        <input
+          id="userText"
+          type="text"
+          placeholder="Ask anything..."
+          class="flex-grow bg-transparent border-none outline-none text-white"
+        />
+
+        <!-- DROPDOWN -->
+        <select id="sourceSelector">
+          <option value="chatgpt">ChatGPT</option>
+          <option value="webmobril">WebMobril</option>
+        </select>
+
+        <!-- audio-lines opens voice mode -->
+        <i data-lucide="audio-lines"
+           class="w-5 h-5 text-gray-400 cursor-pointer icon-btn"
+           onclick="saveSourceAndRedirect()"></i>
+
+        <!-- mic icon placeholder -->
+        <i data-lucide="mic"
+           class="w-5 h-5 text-gray-400 cursor-pointer icon-btn"
+           onclick="startMicRecognition()"></i>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    // restore previous choice
+    const selector = document.getElementById('sourceSelector');
+    const saved = localStorage.getItem('answerSource');
+    if (saved === 'chatgpt' || saved === 'webmobril') {
+      selector.value = saved;
+    }
+    selector.addEventListener('change', () => {
+      localStorage.setItem('answerSource', selector.value);
+    });
+
+    // navigate to voice-mode page
+    function saveSourceAndRedirect() {
+      localStorage.setItem('answerSource', selector.value);
+      localStorage.setItem('startMic', 'true'); // <-- new line
+      window.location.href = 'index.html';
+    }
+
+    // quick mic demo (unchanged)
+    function startMicRecognition() {
+      const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+      if (!SR) return alert('Speech recognition not supported');
+      const r = new SR();
+      r.lang='en-US'; r.interimResults=true;
+      r.onresult = e=>{
+        let fin='', int='';
+        for(let i=0;i<e.results.length;i++){
+          if(e.results[i].isFinal) fin+=e.results[i][0].transcript;
+          else int+=e.results[i][0].transcript;
+        }
+        document.getElementById('userText').value = fin+int;
+      };
+      r.onerror = e=>alert('Speech error:'+e.error);
+      r.start();
+    }
+
+    // chat logic
+    const chatArea = document.getElementById('chatArea');
+    function appendMsg(who, text) {
+      const d = document.createElement('div');
+      d.className = 'chat-msg ' + who;
+
+      // Format markdown using marked.js
+      const formatted = marked.parse(text);
+      d.innerHTML = `${who === 'user' ? '🧑' : '🤖'} ${formatted}`;
+
+      chatArea.appendChild(d);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    document.getElementById('userText').addEventListener('keydown', async e=>{
+      if (e.key!=='Enter') return;
+      const q = e.target.value.trim();
+      if (!q) return;
+      appendMsg('user', q);
+      e.target.value='';
+
+      const src = localStorage.getItem('answerSource')||'chatgpt';
+      let resp = '...';
+      if (src==='webmobril') {
+        // Django API
+        try {
+          const r = await fetch('http://18.188.184.213:8025/api/query/', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({query:q})
+          });
+          const j = await r.json();
+          resp = j.response || 'No response.';
+        } catch {
+          resp = 'Error contacting WebMobril.';
+        }
+      } else {
+        // OpenAI
+        try {
+          const r = await fetch('https://api.openai.com/v1/chat/completions',{
+            method:'POST',
+            headers:{
+              'Content-Type':'application/json',
+              'Authorization':'Bearer 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'
+            },
+            body:JSON.stringify({
+              model:'gpt-4',
+              messages:[
+                {role:'system',content:'You are a helpful assistant.'},
+                {role:'user',content:q}
+              ]
+            })
+          });
+          const j = await r.json();
+          resp = j.choices?.[0]?.message?.content || 'No reply.';
+        } catch {
+          resp = 'Error contacting ChatGPT.';
+        }
+      }
+
+      appendMsg('bot', resp);
+    });
+
+    // background animation (unchanged)
+    function resizeCanvas(){
+      const c=document.getElementById('bg-canvas');
+      c.width=innerWidth; c.height=innerHeight;
+    }
+    addEventListener('resize',resizeCanvas);
+    resizeCanvas();
+    const canvas=document.getElementById('bg-canvas'),
+          ctx=canvas.getContext('2d');
+    const CX=canvas.width/2, CY=canvas.height/2;
+    const DOTS=32, dots=[], orbs=[];
+    const PI2=Math.PI*2, PINT=2200+Math.random()*2000;
+    let lp=Date.now();
+    for(let i=0;i<DOTS;i++){
+      const a=i/DOTS*PI2, r=120+Math.random()*180;
+      orbs.push({a,r,s:0.002+Math.random()*0.003});
+      dots.push({
+        x:CX+Math.cos(a)*r,
+        y:CY+Math.sin(a)*r,
+        rr:2.5+Math.random()*2.5,
+        col:`rgba(0,255,255,${0.7+Math.random()*0.3})`
+      });
+    }
+    let trails=[];
+    function drawPulse(){
+      const now=Date.now(), p=(now-lp)/900;
+      if(p<1){
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(CX,CY,60+p*300,0,PI2);
+        ctx.strokeStyle=`rgba(0,255,255,${1-p})`;
+        ctx.lineWidth=2+6*(1-p);
+        ctx.shadowColor='#00ffff';ctx.shadowBlur=32;
+        ctx.stroke();ctx.restore();
+      }
+      if(now-lp>PINT) lp=now;
+    }
+    function loop(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.save();ctx.globalAlpha=0.18;
+      for(const t of trails){
+        ctx.beginPath();
+        ctx.arc(t.x,t.y,t.rr,0,PI2);
+        ctx.fillStyle=t.col;
+        ctx.shadowColor='#00ffff';ctx.shadowBlur=8;
+        ctx.fill();
+      }
+      ctx.restore();
+      for(let i=0;i<DOTS;i++){
+        for(let j=i+1;j<DOTS;j++){
+          if(Math.random()<0.012){
+            ctx.save();
+            ctx.globalAlpha=0.25+Math.random()*0.4;
+            ctx.strokeStyle='cyan';
+            ctx.shadowColor='#00ffff';ctx.shadowBlur=16;
+            ctx.beginPath();
+            ctx.moveTo(dots[i].x,dots[i].y);
+            ctx.lineTo(dots[j].x,dots[j].y);
+            ctx.stroke();ctx.restore();
+          }
+        }
+      }
+      trails=[];
+      for(let i=0;i<DOTS;i++){
+        orbs[i].a+=orbs[i].s;
+        const rr=orbs[i].r+Math.sin(Date.now()*0.0005+i)*8;
+        dots[i].x=CX+Math.cos(orbs[i].a)*rr;
+        dots[i].y=CY+Math.sin(orbs[i].a)*rr;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(dots[i].x,dots[i].y,dots[i].rr,0,PI2);
+        ctx.fillStyle=dots[i].col;
+        ctx.shadowColor='#00ffff';ctx.shadowBlur=24;
+        ctx.fill();ctx.restore();
+        trails.push({x:dots[i].x,y:dots[i].y,rr:dots[i].rr,col:dots[i].col});
+      }
+      drawPulse();
+      requestAnimationFrame(loop);
+    }
+    loop();
+  </script>
+</body>
+</html>

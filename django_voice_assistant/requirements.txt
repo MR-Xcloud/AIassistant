@@ -1,0 +1,12 @@
+requests
+beautifulsoup4
+sentence-transformers
+faiss-cpu
+numpy
+azure-cognitiveservices-speech
+langchain
+langchain-community
+python-dotenv
+django
+djangorestframework
+django-cors-headers

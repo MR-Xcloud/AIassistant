@@ -1,0 +1,19 @@
+@echo off
+echo ===================================================
+echo    IMPROVED LANGCHAIN VOICE ASSISTANT WITH GROQ
+echo ===================================================
+echo.
+
+echo Activating Python 3.10 environment...
+call .\venv_py310\Scripts\activate
+
+echo.
+echo Python environment information:
+python --version
+pip --version
+
+echo.
+echo Starting Improved LangChain Voice Assistant...
+python voice_assistant_langchain.py
+
+pause

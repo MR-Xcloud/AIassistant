@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Voice Assistant UI</title>
+  <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      background: #0b0f19;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      position: relative;
+      color: #ffffff;
+    }
+    canvas {
+      width: 80vmin;
+      height: 80vmin;
+      z-index: 0;
+      display: block;
+    }
+    .pulse-container {
+      position: absolute;
+      z-index: 5;
+      width: 120px;
+      height: 120px;
+      bottom: 50%;
+      transform: translateY(50%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .pulse-circle {
+      width: 24px;
+      height: 24px;
+      background: #00ffe0;
+      border-radius: 50%;
+      position: relative;
+      box-shadow: 0 0 25px #00ffe0;
+      transition: transform 0.1s ease;
+    }
+    .pulse-circle::before,
+    .pulse-circle::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: rgba(0, 255, 224, 0.2);
+    }
+    .text-scroll {
+      position: absolute;
+      bottom: 130px;
+      width: 80%;
+      max-width: 620px;
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(12px);
+      border-radius: 20px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+      padding: 1.2em 1.5em;
+      font-size: 1rem;
+      line-height: 1.6em;
+      overflow-y: auto;
+      height: 5em;
+      z-index: 2;
+    }
+    .chat-msg { margin-bottom: .4em; word-break: break-word; }
+    .chat-msg.user { color: #00ffe0; }
+    .chat-msg.bot { color: #ffffff; }
+    .bottom-bar {
+      position: absolute;
+      bottom: 40px;
+      display: flex;
+      gap: 20px;
+      z-index: 10;
+    }
+    .bottom-bar button {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 999px;
+      padding: 0.6em 1.4em;
+      font-size: 1.2rem;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(8px);
+    }
+    .bottom-bar button:hover {
+      background: rgba(255,255,255,0.15);
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+<canvas id="dotsCanvas"></canvas>
+<div class="pulse-container"><div class="pulse-circle" id="pulseCircle"></div></div>
+<div class="text-scroll" id="chatScroll"></div>
+<div class="bottom-bar">
+  <button onclick="toggleMic()" id="toggleMicBtn">🔴 Mic</button>
+  <button onclick="stopSpeaking()" id="stopBotBtn">🔴 Bot</button>
+</div>
+
+<script>
+const DJANGO_API = "http://18.188.184.213:8025/api/query/";
+const OPENAI_KEY = "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" // your key
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const AZURE_TTS_KEY = "5wpwERNHmnBc6NzsfKkd9w83iGNfpW1bbedyjaYRsE9hIAr1atDlJQQJ99BEACYeBjFXJ3w3AAAYACOGVFED"; // your key
+const AZURE_REGION = "eastus";
+
+let recognizer, isSleeping = false, isSpeaking = false;
+let queue = [], currentAudio = null, micEnabled = false;
+
+function normalize(txt) {
+  return txt.toLowerCase().replace(/[^a-z ]/g, '').trim();
+}
+function printToChat(msg, who = 'bot') {
+  const area = document.getElementById('chatScroll');
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + who;
+  div.textContent = msg;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+function stopSpeaking() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+  queue = [];
+  isSpeaking = false;
+  printToChat("❗ Bot stopped.", "bot");
+}
+async function speakAzure(text) {
+  const token = await fetch(`https://${AZURE_REGION}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`, {
+    method: "POST",
+    headers: { "Ocp-Apim-Subscription-Key": AZURE_TTS_KEY }
+  }).then(res => res.text());
+
+  const ssml = `<speak version='1.0' xml:lang='en-US'><voice name='en-US-JennyNeural'>${text}</voice></speak>`;
+  const res = await fetch(`https://${AZURE_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+    method: "POST",
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/ssml+xml',
+      'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3'
+    },
+    body: ssml
+  });
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  currentAudio = new Audio(url);
+  currentAudio.onended = () => {
+    isSpeaking = false;
+    processQueue();
+  };
+  currentAudio.play();
+  isSpeaking = true;
+}
+async function process(text) {
+  queue.push(text);
+  if (!isSpeaking) processQueue();
+}
+async function processQueue() {
+  if (queue.length === 0) return;
+  const text = queue.shift();
+  printToChat(text, 'user');
+  if (normalize(text) === 'wait') {
+    isSleeping = true;
+    printToChat("😴 Sleeping. Say 'wake up' to continue.", 'bot');
+    return;
+  }
+
+  const source = localStorage.getItem('answerSource') || 'chatgpt';
+  let answer = "⚠️ Unable to fetch answer.";
+  try {
+    if (source === 'webmobril') {
+      const r = await fetch(DJANGO_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: text })
+      });
+      const j = await r.json();
+      answer = j.response || answer;
+    } else {
+      const r = await fetch(OPENAI_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: text }
+          ]
+        })
+      });
+      const j = await r.json();
+      answer = j.choices?.[0]?.message?.content?.trim() || answer;
+    }
+  } catch {
+    answer = "❌ Error getting answer.";
+  }
+
+  printToChat(answer, 'bot');
+  await speakAzure(answer);
+}
+function startMic() {
+  const cfg = SpeechSDK.SpeechConfig.fromSubscription(AZURE_TTS_KEY, AZURE_REGION);
+  cfg.speechRecognitionLanguage = "en-US";
+  recognizer = new SpeechSDK.SpeechRecognizer(cfg);
+
+  recognizer.recognized = (s, e) => {
+    const txt = e.result.text.trim();
+    const norm = normalize(txt);
+    if (!txt) return;
+    if (norm === 'stop') return stopSpeaking();
+    if (isSleeping && ["wake up", "hello", "hi"].includes(norm)) {
+      isSleeping = false;
+      printToChat("👋 I'm awake!", 'bot');
+      speakAzure("I'm awake");
+      return;
+    }
+    if (!isSleeping) process(txt);
+  };
+
+  recognizer.startContinuousRecognitionAsync();
+  micEnabled = true;
+  document.getElementById('toggleMicBtn').textContent = "🟢 Mic";
+}
+function stopMic() {
+  recognizer?.stopContinuousRecognitionAsync();
+  micEnabled = false;
+  document.getElementById('toggleMicBtn').textContent = "🔴 Mic";
+}
+function toggleMic() {
+  if (micEnabled) stopMic();
+  else startMic();
+}
+window.onload = () => {
+  window.SpeechSDK = window.SpeechSDK || window.SpeechSDKRaw || {};
+  if (localStorage.getItem('startMic') === 'true') {
+    localStorage.removeItem('startMic');
+    startMic();
+  }
+};
+</script>
+
+<script>
+const canvas = document.getElementById('dotsCanvas');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() {
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+const colors = ['#00ffe0','#00d4ff','#1be7ff','#15f5c7'], dots = [];
+const sphereRadius = 120, dotCount = 800;
+for (let i=0;i<dotCount;i++){
+  const theta=Math.random()*2*Math.PI, phi=Math.acos(1-2*Math.random());
+  const x=sphereRadius*Math.sin(phi)*Math.cos(theta);
+  const y=sphereRadius*Math.sin(phi)*Math.sin(theta);
+  const z=sphereRadius*Math.cos(phi);
+  dots.push({x,y,z});
+}
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(const d of dots){
+    const p=300/(300+d.z), x2d=d.x*p+canvas.width/2, y2d=d.y*p+canvas.height/2;
+    const size=p*1.2;
+    ctx.fillStyle=colors[Math.floor(Math.random()*colors.length)];
+    ctx.fillRect(x2d,y2d,size,size);
+    d.z-=0.7;
+    if(d.z< -sphereRadius) d.z=sphereRadius;
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>

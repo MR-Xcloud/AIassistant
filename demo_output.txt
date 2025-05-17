@@ -1,0 +1,16 @@
+This is a demonstration of how the fixed voice assistant would respond to specific questions. Here are some examples:
+
+Question: Who is Ajay Saraswat?
+Answer: Ajay Saraswat is the CEO and Founder of WebMobril.
+
+Question: Who is the CEO?
+Answer: The CEO of WebMobril is Ajay Saraswat.
+
+Question: Where is the company located?
+Answer: WebMobril is headquartered in Noida, India with offices in India, USA, UK.
+
+Question: When was the company founded?
+Answer: WebMobril was founded in 2014.
+
+Question: What services does WebMobril offer?
+Answer: WebMobril offers Web Development, Mobile App Development, UI/UX Design, Digital Marketing, Enterprise Solutions.
