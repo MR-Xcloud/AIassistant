@@ -1,4 +1,26 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
 venv*/
+.venv*/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Log and data files
+*.log
+*.sqlite3
 *.pkl
-*.dll
-*.lib
+*.db
+
+# VSCode
+.vscode/
+
+# Mac & Linux
+.DS_Store
+
+# Pytest cache
+.pytest_cache/
