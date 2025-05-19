@@ -21,8 +21,8 @@ GROQ_API_KEY = "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"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # OpenAI API key
-OPENAI_API_KEY = "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"
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_API_KEY = "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" 
+OPENAI_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Use OpenAI instead of Groq due to quota limits
 USE_OPENAI = True
@@ -246,7 +246,7 @@ def ask_openai(context, question):
         {"role": "user", "content": f"Context:\n{context}\n\nQuestion:\n{question}\n\nProvide a direct answer without mentioning the context or using phrases like 'Based on the provided context'. Do not use any markdown formatting like asterisks (*) or underscores (_) in your answer."}
     ]
     payload = {
-        "model": "gpt-3.5-turbo",
+        "model": "meta-llama/llama-3.3-8b-instruct:free",
         "messages": messages,
         "temperature": 0.2
     }
