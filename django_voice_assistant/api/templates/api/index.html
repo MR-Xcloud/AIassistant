@@ -170,14 +170,14 @@
       } else {
         // OpenAI
         try {
-          const r = await fetch('https://api.openai.com/v1/chat/completions',{
+          const r = await fetch('https://openrouter.ai/api/v1/chat/completions',{
             method:'POST',
             headers:{
               'Content-Type':'application/json',
-              'Authorization':'Bearer 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'
+              'Authorization':'Bearer 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'
             },
             body:JSON.stringify({
-              model:'gpt-4',
+              model:'meta-llama/llama-3.3-8b-instruct:free',
               messages:[
                 {role:'system',content:'You are a helpful assistant.'},
                 {role:'user',content:q}
